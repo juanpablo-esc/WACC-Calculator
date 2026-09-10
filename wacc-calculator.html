@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WACC Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6; /* Cost of Equity (Re) */
+    --series-2:       #eb6834; /* Cost of Debt (Rd) */
+    --series-3:       #1baf7a; /* Tax Rate (t) */
+    --series-4:       #eda100; /* Debt Weight (D/V) */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #d95926;
+      --series-3:       #199e70;
+      --series-4:       #c98500;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 20px; }
+  h2 { font-size: 1rem; margin: 0 0 12px; color: var(--text-primary); }
+
+  .app {
+    display: flex;
+    gap: 20px;
+    max-width: 1280px;
+    margin: 0 auto;
+    align-items: flex-start;
+  }
+  @media (max-width: 860px) {
+    .app { flex-direction: column; }
+  }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .panel-left {
+    flex: 0 0 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  @media (max-width: 860px) {
+    .panel-left { flex: 1 1 auto; width: 100%; }
+  }
+
+  .panel-right {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .field-row label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+  .field-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  input[type="range"] {
+    flex: 1 1 auto;
+    accent-color: var(--series-1);
+    height: 4px;
+  }
+  input[type="number"] {
+    width: 68px;
+    flex: 0 0 auto;
+    font-size: 0.85rem;
+    font-family: inherit;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--page);
+    color: var(--text-primary);
+    text-align: right;
+  }
+  input[type="number"]:disabled {
+    color: var(--text-muted);
+    background: transparent;
+  }
+
+  .ev-field { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gridline); }
+  .ev-value { font-size: 0.85rem; color: var(--text-primary); font-weight: 600; }
+  .split-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-top: 8px;
+    background: var(--gridline);
+  }
+  .split-bar .debt { background: var(--series-2); }
+  .split-bar .equity { background: var(--series-1); }
+  .split-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .results {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 640px) {
+    .results { grid-template-columns: repeat(2, 1fr); }
+  }
+  .stat {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .stat-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .stat .stat-value {
+    font-size: 1.3rem;
+    margin-top: 4px;
+    color: var(--text-primary);
+  }
+  .stat.wacc .stat-value { font-weight: 700; font-size: 1.6rem; }
+  .stat.wacc { border-color: var(--series-1); }
+
+  .chart-card { height: auto; }
+  .chart-card canvas { max-width: 100%; }
+  #sensitivityChart { height: 320px !important; }
+  #tornadoChart { height: 260px !important; }
+
+  .note {
+    margin: 12px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+  .note strong { color: var(--text-primary); }
+</style>
+</head>
+<body>
+  <h1>WACC Calculator</h1>
+  <div class="app">
+    <aside class="panel-left card">
+      <div class="field" data-field="re">
+        <div class="field-row">
+          <label for="re-range">Cost of Equity (Re)</label>
+        </div>
+        <div class="field-controls">
+          <input type="range" id="re-range" min="0" max="25" step="0.1" value="9.5">
+          <input type="number" id="re-number" min="0" max="25" step="0.1" value="9.5">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="field" data-field="rd">
+        <div class="field-row">
+          <label for="rd-range">Cost of Debt, pre-tax (Rd)</label>
+        </div>
+        <div class="field-controls">
+          <input type="range" id="rd-range" min="0" max="15" step="0.1" value="5.0">
+          <input type="number" id="rd-number" min="0" max="15" step="0.1" value="5.0">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="field" data-field="tax">
+        <div class="field-row">
+          <label for="tax-range">Tax Rate (t)</label>
+        </div>
+        <div class="field-controls">
+          <input type="range" id="tax-range" min="0" max="50" step="0.5" value="25">
+          <input type="number" id="tax-number" min="0" max="50" step="0.5" value="25">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="field" data-field="dv">
+        <div class="field-row">
+          <label for="dv-range">Debt Weight (D/V)</label>
+        </div>
+        <div class="field-controls">
+          <input type="range" id="dv-range" min="0" max="100" step="0.5" value="30">
+          <input type="number" id="dv-number" min="0" max="100" step="0.5" value="30">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="ev-field">
+        <div class="field-row">
+          <label>Equity Weight (E/V) — derived</label>
+          <span class="ev-value" id="ev-value">70.00%</span>
+        </div>
+        <div class="split-bar">
+          <div class="debt" id="split-debt" style="width:30%"></div>
+          <div class="equity" id="split-equity" style="width:70%"></div>
+        </div>
+        <div class="split-legend">
+          <span>Debt (D/V)</span>
+          <span>Equity (E/V = 1 − D/V)</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="panel-right">
+      <section class="results">
+        <div class="stat">
+          <div class="stat-label">After-tax cost of debt</div>
+          <div class="stat-value" id="out-rdAfterTax">3.75%</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Equity contribution</div>
+          <div class="stat-value" id="out-equityContribution">6.65%</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Debt contribution</div>
+          <div class="stat-value" id="out-debtContribution">1.13%</div>
+        </div>
+        <div class="stat wacc">
+          <div class="stat-label">WACC</div>
+          <div class="stat-value" id="out-wacc">7.77%</div>
+        </div>
+      </section>
+
+      <section class="card chart-card">
+        <h2>Sensitivity of WACC to Each Input</h2>
+        <canvas id="sensitivityChart"></canvas>
+      </section>
+
+      <section class="card chart-card">
+        <h2>Tornado Chart — WACC Impact of a ±25% Flex</h2>
+        <canvas id="tornadoChart"></canvas>
+        <p class="note" id="tornado-note"></p>
+      </section>
+    </main>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Configuration -------------------------------------------------
+  // Valid range and default (percent) for every input.
+  const RANGES = {
+    re:  { min: 0,  max: 25,  step: 0.1, default: 9.5, label: "Cost of Equity (Re)" },
+    rd:  { min: 0,  max: 15,  step: 0.1, default: 5.0, label: "Cost of Debt (Rd)" },
+    tax: { min: 0,  max: 50,  step: 0.5, default: 25,  label: "Tax Rate (t)" },
+    dv:  { min: 0,  max: 100, step: 0.5, default: 30,  label: "Debt Weight (D/V)" }
+  };
+  const FIELD_ORDER = ["re", "rd", "tax", "dv"];
+
+  const state = {
+    re: RANGES.re.default,
+    rd: RANGES.rd.default,
+    tax: RANGES.tax.default,
+    dv: RANGES.dv.default
+  };
+
+  function clamp(v, min, max) {
+    return Math.min(max, Math.max(min, v));
+  }
+
+  function seriesColor(key) {
+    const idx = { re: 1, rd: 2, tax: 3, dv: 4 }[key];
+    return getComputedStyle(document.documentElement).getPropertyValue(`--series-${idx}`).trim();
+  }
+
+  // ---- Core WACC calculation -----------------------------------------
+  //
+  // WACC = (E/V * Re) + (D/V * Rd * (1 - t))
+  //
+  // Inputs arrive as percentages from the UI (e.g. 9.5 for 9.5%) and are
+  // converted to decimals here. Equity weight (E/V) is never an
+  // independent input: it is always derived as 1 - D/V, so D/V is
+  // clamped to [0, 1] first and E/V falls out of that clamp automatically.
+  // Because both weights are used directly as multipliers (rather than as
+  // a ratio like E/(D+E) computed from separate dollar amounts of debt and
+  // equity), there is no denominator that can go to zero - D/V = 0% and
+  // D/V = 100% are just the two ends of the clamped range and both are
+  // ordinary calculations, not edge cases requiring special handling.
+  function calcWACC(rePct, rdPct, taxPct, dvPct) {
+    const re = rePct / 100;
+    const rd = rdPct / 100;
+    const tax = taxPct / 100;
+    const dv = clamp(dvPct / 100, 0, 1);
+    const ev = 1 - dv;
+
+    const rdAfterTax = rd * (1 - tax);
+    const equityContribution = ev * re;
+    const debtContribution = dv * rdAfterTax;
+    const wacc = equityContribution + debtContribution;
+
+    return { ev, dv, rdAfterTax, equityContribution, debtContribution, wacc };
+  }
+
+  // ---- Sensitivity sweep ----------------------------------------------
+  //
+  // For a single input `key`, sweep it across its own full [min, max]
+  // range in `steps` evenly spaced points, recomputing WACC at each point
+  // while holding the other three inputs fixed at the current base
+  // values. The x-coordinate returned is normalized to 0-100 (percent of
+  // that input's own range) rather than the input's raw value, so all
+  // four inputs' sweeps - despite having different units and ranges -
+  // can be plotted on one shared x-axis for direct comparison.
+  function sweepInput(key, base, steps) {
+    const range = RANGES[key];
+    const points = [];
+    for (let i = 0; i < steps; i++) {
+      const rawValue = range.min + (range.max - range.min) * (i / (steps - 1));
+      const trial = Object.assign({}, base);
+      trial[key] = rawValue;
+      const result = calcWACC(trial.re, trial.rd, trial.tax, trial.dv);
+      const xPct = ((rawValue - range.min) / (range.max - range.min)) * 100;
+      points.push({ x: xPct, y: result.wacc * 100, rawValue });
+    }
+    return points;
+  }
+
+  function buildSensitivityData(base, steps) {
+    steps = steps || 50;
+    const out = {};
+    FIELD_ORDER.forEach((key) => {
+      out[key] = sweepInput(key, base, steps);
+    });
+    return out;
+  }
+
+  // ---- Tornado (±25% flex) ---------------------------------------------
+  // Flex each input +/-25% relative to its own current (base) value, one
+  // input at a time, holding the other three at base. The resulting WACC
+  // at each flexed point is recorded; low/high are taken as the min/max
+  // of the two so the bar always spans the correct direction regardless
+  // of whether the input is positively or negatively correlated with WACC.
+  function buildTornadoData(base) {
+    const baseWacc = calcWACC(base.re, base.rd, base.tax, base.dv).wacc * 100;
+
+    const rows = FIELD_ORDER.map((key) => {
+      const range = RANGES[key];
+      const baseVal = base[key];
+      const flexLow = clamp(baseVal * 0.75, range.min, range.max);
+      const flexHigh = clamp(baseVal * 1.25, range.min, range.max);
+
+      const trialLow = Object.assign({}, base); trialLow[key] = flexLow;
+      const trialHigh = Object.assign({}, base); trialHigh[key] = flexHigh;
+
+      const waccAtLow = calcWACC(trialLow.re, trialLow.rd, trialLow.tax, trialLow.dv).wacc * 100;
+      const waccAtHigh = calcWACC(trialHigh.re, trialHigh.rd, trialHigh.tax, trialHigh.dv).wacc * 100;
+
+      const low = Math.min(waccAtLow, waccAtHigh);
+      const high = Math.max(waccAtLow, waccAtHigh);
+
+      return {
+        key,
+        label: RANGES[key].label,
+        low,
+        high,
+        swingBps: (high - low) * 100
+      };
+    });
+
+    rows.sort((a, b) => b.swingBps - a.swingBps);
+    return { rows, baseWacc };
+  }
+
+  // ---- DOM wiring -------------------------------------------------------
+  const els = {};
+  FIELD_ORDER.forEach((key) => {
+    els[key] = {
+      range: document.getElementById(`${key}-range`),
+      number: document.getElementById(`${key}-number`)
+    };
+  });
+
+  function setField(key, value, skipRender) {
+    const r = RANGES[key];
+    const v = clamp(value, r.min, r.max);
+    state[key] = v;
+    els[key].range.value = v;
+    els[key].number.value = v;
+    if (!skipRender) renderAll();
+  }
+
+  FIELD_ORDER.forEach((key) => {
+    els[key].range.addEventListener("input", (e) => setField(key, parseFloat(e.target.value)));
+    els[key].number.addEventListener("input", (e) => {
+      if (e.target.value === "") return;
+      setField(key, parseFloat(e.target.value));
+    });
+    els[key].number.addEventListener("blur", (e) => {
+      if (e.target.value === "" || isNaN(parseFloat(e.target.value))) {
+        setField(key, RANGES[key].default);
+      }
+    });
+  });
+
+  const outEls = {
+    rdAfterTax: document.getElementById("out-rdAfterTax"),
+    equityContribution: document.getElementById("out-equityContribution"),
+    debtContribution: document.getElementById("out-debtContribution"),
+    wacc: document.getElementById("out-wacc"),
+    evValue: document.getElementById("ev-value"),
+    splitDebt: document.getElementById("split-debt"),
+    splitEquity: document.getElementById("split-equity"),
+    tornadoNote: document.getElementById("tornado-note")
+  };
+
+  // ---- Charts -------------------------------------------------------------
+  let sensitivityChart, tornadoChart;
+
+  function initCharts() {
+    const sensCtx = document.getElementById("sensitivityChart").getContext("2d");
+    const gridColor = getComputedStyle(document.documentElement).getPropertyValue("--gridline").trim();
+    const mutedColor = getComputedStyle(document.documentElement).getPropertyValue("--text-muted").trim();
+    const secondaryColor = getComputedStyle(document.documentElement).getPropertyValue("--text-secondary").trim();
+    const surfaceColor = getComputedStyle(document.documentElement).getPropertyValue("--surface-1").trim();
+
+    const lineDatasets = FIELD_ORDER.map((key) => ({
+      label: RANGES[key].label,
+      data: [],
+      borderColor: seriesColor(key),
+      backgroundColor: seriesColor(key),
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.15,
+      key
+    }));
+
+    const baseMarkerDataset = {
+      type: "scatter",
+      label: "Base case",
+      data: [],
+      backgroundColor: FIELD_ORDER.map(seriesColor),
+      pointBackgroundColor: [],
+      pointBorderColor: surfaceColor,
+      pointBorderWidth: 2,
+      pointRadius: 6,
+      pointHoverRadius: 7,
+      showLine: false,
+      order: -1
+    };
+
+    sensitivityChart = new Chart(sensCtx, {
+      type: "line",
+      data: { datasets: lineDatasets.concat([baseMarkerDataset]) },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 150 },
+        interaction: { mode: "nearest", intersect: false },
+        scales: {
+          x: {
+            type: "linear",
+            min: 0,
+            max: 100,
+            title: { display: true, text: "% of input's own range", color: mutedColor },
+            grid: { color: gridColor, drawTicks: false },
+            ticks: { color: mutedColor, callback: (v) => v + "%" }
+          },
+          y: {
+            title: { display: true, text: "WACC (%)", color: mutedColor },
+            grid: { color: gridColor, drawTicks: false },
+            ticks: { color: mutedColor, callback: (v) => v.toFixed(1) + "%" }
+          }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            labels: {
+              color: secondaryColor,
+              filter: (item) => item.text !== "Base case"
+            }
+          },
+          tooltip: {
+            callbacks: {
+              title: (items) => items[0].dataset.label || "",
+              label: (item) => {
+                const raw = item.raw;
+                const key = item.dataset.key;
+                const valueLabel = key ? `${RANGES[key].label.match(/\(([^)]+)\)/)[1]}: ${raw.rawValue.toFixed(2)}%` : "";
+                return `${valueLabel}  →  WACC ${raw.y.toFixed(2)}%`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const tornadoCtx = document.getElementById("tornadoChart").getContext("2d");
+    tornadoChart = new Chart(tornadoCtx, {
+      type: "bar",
+      data: {
+        labels: [],
+        datasets: [{
+          label: "WACC range",
+          data: [],
+          backgroundColor: [],
+          borderRadius: 4,
+          borderSkipped: false,
+          barThickness: 22
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 150 },
+        layout: { padding: { top: 18 } },
+        scales: {
+          x: {
+            title: { display: true, text: "WACC (%)", color: mutedColor },
+            grid: { color: gridColor, drawTicks: false },
+            ticks: { color: mutedColor, callback: (v) => v.toFixed(1) + "%" }
+          },
+          y: {
+            grid: { display: false },
+            ticks: { color: secondaryColor, font: { weight: "600" } }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (item) => {
+                const row = tornadoRowsCache[item.dataIndex];
+                return `Low ${row.low.toFixed(2)}%  ·  High ${row.high.toFixed(2)}%  ·  Swing ${Math.round(row.swingBps)} bps`;
+              }
+            }
+          }
+        }
+      },
+      plugins: [baseLinePlugin, swingLabelPlugin]
+    });
+  }
+
+  // Custom plugin: draws a dashed vertical reference line at the base-case
+  // WACC value on the tornado chart, so every bar is visually read against
+  // "what WACC is today".
+  let tornadoBaseWaccCache = 0;
+  let tornadoRowsCache = [];
+  const baseLinePlugin = {
+    id: "baseLine",
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const x = scales.x.getPixelForValue(tornadoBaseWaccCache);
+      const lineColor = getComputedStyle(document.documentElement).getPropertyValue("--text-muted").trim();
+      ctx.save();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = lineColor;
+      ctx.font = "11px system-ui, -apple-system, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`Base ${tornadoBaseWaccCache.toFixed(2)}%`, x, chartArea.top - 4);
+      ctx.restore();
+    }
+  };
+
+  // Custom plugin: labels each tornado bar with its swing in basis points,
+  // placed just past whichever end of the bar is farther from the base line.
+  const swingLabelPlugin = {
+    id: "swingLabel",
+    afterDatasetsDraw(chart) {
+      const { ctx, scales } = chart;
+      const meta = chart.getDatasetMeta(0);
+      const textColor = getComputedStyle(document.documentElement).getPropertyValue("--text-secondary").trim();
+      ctx.save();
+      ctx.fillStyle = textColor;
+      ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+      ctx.textBaseline = "middle";
+      meta.data.forEach((bar, i) => {
+        const row = tornadoRowsCache[i];
+        if (!row) return;
+        const highPx = scales.x.getPixelForValue(row.high);
+        const lowPx = scales.x.getPixelForValue(row.low);
+        const rightmost = Math.max(highPx, lowPx);
+        ctx.textAlign = "left";
+        ctx.fillText(`${Math.round(row.swingBps)} bps`, rightmost + 8, bar.y);
+      });
+      ctx.restore();
+    }
+  };
+
+  // ---- Render -------------------------------------------------------------
+  function renderAll() {
+    const result = calcWACC(state.re, state.rd, state.tax, state.dv);
+
+    outEls.rdAfterTax.textContent = (result.rdAfterTax * 100).toFixed(2) + "%";
+    outEls.equityContribution.textContent = (result.equityContribution * 100).toFixed(2) + "%";
+    outEls.debtContribution.textContent = (result.debtContribution * 100).toFixed(2) + "%";
+    outEls.wacc.textContent = (result.wacc * 100).toFixed(2) + "%";
+    outEls.evValue.textContent = (result.ev * 100).toFixed(2) + "%";
+    outEls.splitDebt.style.width = (result.dv * 100) + "%";
+    outEls.splitEquity.style.width = (result.ev * 100) + "%";
+
+    // Sensitivity chart
+    const sweepData = buildSensitivityData(state, 50);
+    sensitivityChart.data.datasets.forEach((ds) => {
+      if (!ds.key) return;
+      ds.data = sweepData[ds.key];
+    });
+    const baseMarkerDs = sensitivityChart.data.datasets.find((d) => !d.key);
+    baseMarkerDs.data = FIELD_ORDER.map((key) => {
+      const range = RANGES[key];
+      const xPct = ((state[key] - range.min) / (range.max - range.min)) * 100;
+      return { x: xPct, y: result.wacc * 100 };
+    });
+    baseMarkerDs.pointBackgroundColor = FIELD_ORDER.map(seriesColor);
+    sensitivityChart.update("none");
+
+    // Tornado chart
+    const tornado = buildTornadoData(state);
+    tornadoRowsCache = tornado.rows;
+    tornadoBaseWaccCache = tornado.baseWacc;
+
+    tornadoChart.data.labels = tornado.rows.map((r) => r.label);
+    tornadoChart.data.datasets[0].data = tornado.rows.map((r) => [r.low, r.high]);
+    tornadoChart.data.datasets[0].backgroundColor = tornado.rows.map((r) => seriesColor(r.key));
+    // Leave headroom for the swing-in-bps labels drawn past each bar's end.
+    const maxAbs = Math.max(...tornado.rows.map((r) => Math.max(Math.abs(r.high - tornado.baseWacc), Math.abs(r.low - tornado.baseWacc))));
+    tornadoChart.options.scales.x.min = tornado.baseWacc - maxAbs * 1.5 - 0.5;
+    tornadoChart.options.scales.x.max = tornado.baseWacc + maxAbs * 1.5 + 0.5;
+    tornadoChart.update("none");
+
+    const top = tornado.rows[0];
+    outEls.tornadoNote.innerHTML = `WACC is most sensitive to <strong>${top.label}</strong> at the current base case: flexing it ±25% swings WACC by <strong>${Math.round(top.swingBps)} bps</strong> (from ${top.low.toFixed(2)}% to ${top.high.toFixed(2)}%), more than any other input.`;
+  }
+
+  // ---- Init ----------------------------------------------------------------
+  FIELD_ORDER.forEach((key) => setField(key, state[key], true));
+  initCharts();
+  renderAll();
+
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    sensitivityChart.destroy();
+    tornadoChart.destroy();
+    initCharts();
+    renderAll();
+  });
+})();
+</script>
+</body>
+</html>
