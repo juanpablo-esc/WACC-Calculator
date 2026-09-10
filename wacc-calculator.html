@@ -32,10 +32,12 @@
     --gridline:       #e1e0d9;
     --baseline:       #c3c2b7;
     --border:         rgba(11,11,11,0.10);
-    --series-1:       #2a78d6; /* Cost of Equity (Re) */
-    --series-2:       #eb6834; /* Cost of Debt (Rd) */
+    --series-1:       #2a78d6; /* Debt Weight (D/V) */
+    --series-2:       #eb6834; /* Cost of Debt at Zero Leverage (Rd0) */
     --series-3:       #1baf7a; /* Tax Rate (t) */
-    --series-4:       #eda100; /* Debt Weight (D/V) */
+    --series-4:       #eda100; /* Risk-Free Rate (Rf) */
+    --series-5:       #e87ba4; /* Unlevered Beta */
+    --series-6:       #008300; /* Equity Risk Premium (ERP) */
     --status-good:    #0ca30c;
   }
   @media (prefers-color-scheme: dark) {
@@ -53,6 +55,8 @@
       --series-2:       #d95926;
       --series-3:       #199e70;
       --series-4:       #c98500;
+      --series-5:       #d55181;
+      --series-6:       #008300;
     }
   }
 
@@ -148,6 +152,31 @@
   }
 
   .ev-field { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gridline); }
+
+  .field-group-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+  }
+  .field-group + .field-group-label,
+  .field-group-label + .field-group-label { margin-top: 4px; }
+  .field-group {
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--gridline);
+  }
+  .derived-readout {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 8px;
+  }
+  .derived-readout strong { color: var(--text-primary); font-weight: 600; }
   .split-bar {
     display: flex;
     height: 10px;
@@ -196,7 +225,7 @@
 
   .chart-card { height: auto; }
   .chart-card canvas { max-width: 100%; }
-  #tornadoChart { height: 260px !important; }
+  #tornadoChart { height: 340px !important; }
   #chart-dv { height: 320px !important; }
 
   .chart-legend {
@@ -249,25 +278,66 @@
   <h1>WACC Calculator</h1>
   <div class="app">
     <aside class="panel-left card">
-      <div class="field" data-field="re">
-        <div class="field-row">
-          <label for="re-range">Cost of Equity (Re)</label>
+      <p class="field-group-label">Cost of Equity (CAPM)</p>
+      <div class="field-group">
+        <div class="field" data-field="rf">
+          <div class="field-row">
+            <label for="rf-range">Risk-Free Rate (Rf)</label>
+          </div>
+          <div class="field-controls">
+            <input type="range" id="rf-range" min="0" max="8" step="0.1" value="4.0">
+            <input type="number" id="rf-number" min="0" max="8" step="0.1" value="4.0">
+            <span>%</span>
+          </div>
         </div>
-        <div class="field-controls">
-          <input type="range" id="re-range" min="0" max="25" step="0.1" value="9.5">
-          <input type="number" id="re-number" min="0" max="25" step="0.1" value="9.5">
-          <span>%</span>
+
+        <div class="field" data-field="betaU">
+          <div class="field-row">
+            <label for="betaU-range">Unlevered Beta (β)</label>
+          </div>
+          <div class="field-controls">
+            <input type="range" id="betaU-range" min="0.3" max="2.5" step="0.05" value="1.00">
+            <input type="number" id="betaU-number" min="0.3" max="2.5" step="0.05" value="1.00">
+            <span>&nbsp;</span>
+          </div>
+        </div>
+
+        <div class="field" data-field="erp">
+          <div class="field-row">
+            <label for="erp-range">Equity Risk Premium (ERP)</label>
+          </div>
+          <div class="field-controls">
+            <input type="range" id="erp-range" min="2" max="10" step="0.1" value="5.5">
+            <input type="number" id="erp-number" min="2" max="10" step="0.1" value="5.5">
+            <span>%</span>
+          </div>
+        </div>
+
+        <div class="derived-readout">
+          <span>Levered Beta (at current D/V)</span>
+          <strong id="out-leveredBeta">1.30</strong>
+        </div>
+        <div class="derived-readout">
+          <span>Cost of Equity (Re = Rf + β·ERP)</span>
+          <strong id="out-re">11.65%</strong>
         </div>
       </div>
 
-      <div class="field" data-field="rd">
-        <div class="field-row">
-          <label for="rd-range">Cost of Debt, pre-tax (Rd)</label>
+      <p class="field-group-label">Cost of Debt</p>
+      <div class="field-group">
+        <div class="field" data-field="rd0">
+          <div class="field-row">
+            <label for="rd0-range">Cost of Debt at Zero Leverage (Rd₀)</label>
+          </div>
+          <div class="field-controls">
+            <input type="range" id="rd0-range" min="0" max="15" step="0.1" value="5.0">
+            <input type="number" id="rd0-number" min="0" max="15" step="0.1" value="5.0">
+            <span>%</span>
+          </div>
         </div>
-        <div class="field-controls">
-          <input type="range" id="rd-range" min="0" max="15" step="0.1" value="5.0">
-          <input type="number" id="rd-number" min="0" max="15" step="0.1" value="5.0">
-          <span>%</span>
+        <div class="derived-readout">
+          <span>Effective Rd at current D/V (credit spread widens with leverage)</span>
+          <strong id="out-rdEffective">5.54%</strong>
         </div>
       </div>
 
@@ -366,66 +436,93 @@
   "use strict";
 
   // ---- Configuration -------------------------------------------------
-  // Valid range and default (percent) for every input.
+  // Valid range and default (percent, except betaU which is a plain
+  // multiplier) for every input.
   const RANGES = {
-    re:  { min: 0,  max: 25,  step: 0.1, default: 9.5, label: "Cost of Equity (Re)" },
-    rd:  { min: 0,  max: 15,  step: 0.1, default: 5.0, label: "Cost of Debt (Rd)" },
-    tax: { min: 0,  max: 50,  step: 0.5, default: 25,  label: "Tax Rate (t)" },
-    dv:  { min: 0,  max: 100, step: 0.5, default: 30,  label: "Debt Weight (D/V)" }
+    dv:    { min: 0,   max: 100, step: 0.5,  default: 30,  label: "Debt Weight (D/V)" },
+    rd0:   { min: 0,   max: 15,  step: 0.1,  default: 5.0, label: "Cost of Debt at Zero Leverage (Rd₀)" },
+    tax:   { min: 0,   max: 50,  step: 0.5,  default: 25,  label: "Tax Rate (t)" },
+    rf:    { min: 0,   max: 8,   step: 0.1,  default: 4.0, label: "Risk-Free Rate (Rf)" },
+    betaU: { min: 0.3, max: 2.5, step: 0.05, default: 1.00, label: "Unlevered Beta (β)" },
+    erp:   { min: 2,   max: 10,  step: 0.1,  default: 5.5, label: "Equity Risk Premium (ERP)" }
   };
-  const FIELD_ORDER = ["re", "rd", "tax", "dv"];
+  const FIELD_ORDER = ["dv", "rd0", "tax", "rf", "betaU", "erp"];
 
-  const state = {
-    re: RANGES.re.default,
-    rd: RANGES.rd.default,
-    tax: RANGES.tax.default,
-    dv: RANGES.dv.default
-  };
+  const state = {};
+  FIELD_ORDER.forEach((key) => { state[key] = RANGES[key].default; });
 
   function clamp(v, min, max) {
     return Math.min(max, Math.max(min, v));
   }
 
   function seriesColor(key) {
-    const idx = { re: 1, rd: 2, tax: 3, dv: 4 }[key];
+    const idx = { dv: 1, rd0: 2, tax: 3, rf: 4, betaU: 5, erp: 6 }[key];
     return getComputedStyle(document.documentElement).getPropertyValue(`--series-${idx}`).trim();
   }
 
   // ---- Core WACC calculation -----------------------------------------
   //
-  // WACC = (E/V * Re) + (D/V * Rd * (1 - t))
+  // WACC = (E/V * Re) + (D/V * Rd * (1 - t)), same formula as always, but
+  // Re and Rd are no longer free sliders - both are now DERIVED so that
+  // WACC can actually bend into a U-shape as D/V varies. A straight blend
+  // of two constants is always a straight line no matter how those
+  // constants are chosen - see the two mechanisms below for how each one
+  // is made to depend on leverage instead.
   //
-  // Inputs arrive as percentages from the UI (e.g. 9.5 for 9.5%) and are
-  // converted to decimals here. Equity weight (E/V) is never an
-  // independent input: it is always derived as 1 - D/V, so D/V is
-  // clamped to [0, 1] first and E/V falls out of that clamp automatically.
-  // Because both weights are used directly as multipliers (rather than as
-  // a ratio like E/(D+E) computed from separate dollar amounts of debt and
-  // equity), there is no denominator that can go to zero - D/V = 0% and
-  // D/V = 100% are just the two ends of the clamped range and both are
-  // ordinary calculations, not edge cases requiring special handling.
-  function calcWACC(rePct, rdPct, taxPct, dvPct) {
-    const re = rePct / 100;
-    const rd = rdPct / 100;
-    const tax = taxPct / 100;
-    const dv = clamp(dvPct / 100, 0, 1);
+  // Cost of equity - CAPM plus Hamada relevering:
+  //   D/E         = D/V / (1 - D/V)
+  //   betaLevered = betaU * (1 + (1 - t) * D/E)   (more debt -> riskier equity)
+  //   Re          = Rf + betaLevered * ERP
+  //
+  // Cost of debt - a credit spread that widens with leverage:
+  //   Rd(D/V) = Rd0 + DISTRESS_SPREAD_AT_100PCT * (D/V)^2
+  //
+  // The widening spread is the piece that actually produces the U: it can
+  // be shown algebraically that relevering Re alone (holding Rd fixed)
+  // still leaves WACC perfectly linear in D/V - the D/E term inside
+  // betaLevered exactly cancels against the (1 - D/V) equity weight it's
+  // multiplied by. Only once Rd itself rises with leverage does that
+  // cancellation break, letting the rising cost of financial risk
+  // eventually outweigh the tax benefit of cheap debt and turn the curve
+  // back up.
+  //
+  // equityContribution below is the algebraic simplification of
+  // (1 - D/V) * Re after expanding betaLevered - it is exactly equivalent
+  // but has no D/E term in it, so (unlike Re itself) it stays finite and
+  // correct even as D/V -> 100%, where D/E diverges. Re is still computed
+  // directly (with E/V floored at a small epsilon) purely for display.
+  const DISTRESS_SPREAD_AT_100PCT = 6; // percentage points of extra Rd at D/V = 100%
+
+  function calcWACC(inputs) {
+    const rf = inputs.rf / 100;
+    const betaU = inputs.betaU;
+    const erp = inputs.erp / 100;
+    const rd0 = inputs.rd0 / 100;
+    const tax = inputs.tax / 100;
+    const dv = clamp(inputs.dv / 100, 0, 1);
     const ev = 1 - dv;
 
-    const rdAfterTax = rd * (1 - tax);
-    const equityContribution = ev * re;
+    const de = dv / Math.max(ev, 0.005); // epsilon floor: display-only, avoids 1/0 as D/V -> 100%
+    const betaLevered = betaU * (1 + (1 - tax) * de);
+    const re = rf + betaLevered * erp;
+
+    const rdEffective = rd0 + (DISTRESS_SPREAD_AT_100PCT / 100) * dv * dv;
+    const rdAfterTax = rdEffective * (1 - tax);
+
+    const equityContribution = ev * (rf + betaU * erp) + dv * (1 - tax) * betaU * erp;
     const debtContribution = dv * rdAfterTax;
     const wacc = equityContribution + debtContribution;
 
-    return { ev, dv, rdAfterTax, equityContribution, debtContribution, wacc };
+    return { ev, dv, betaLevered, re, rdEffective, rdAfterTax, equityContribution, debtContribution, wacc };
   }
 
   // ---- Sensitivity sweep ----------------------------------------------
   //
   // For a single input `key`, sweep it across its own full [min, max]
   // range in `steps` evenly spaced points, recomputing WACC at each point
-  // while holding the other three inputs fixed at the current base
-  // values. The endpoints (i = 0 and i = steps - 1) always land exactly
-  // on range.min and range.max, which matters for findOptimalDV below.
+  // while holding the other inputs fixed at the current base values. The
+  // endpoints (i = 0 and i = steps - 1) always land exactly on range.min
+  // and range.max, which matters for findOptimalDV below.
   function sweepInput(key, base, steps) {
     const range = RANGES[key];
     const points = [];
@@ -433,7 +530,7 @@
       const rawValue = range.min + (range.max - range.min) * (i / (steps - 1));
       const trial = Object.assign({}, base);
       trial[key] = rawValue;
-      const result = calcWACC(trial.re, trial.rd, trial.tax, trial.dv);
+      const result = calcWACC(trial);
       points.push({ x: rawValue, y: result.wacc * 100 });
     }
     return points;
@@ -441,26 +538,24 @@
 
   // ---- Optimal capital structure ---------------------------------------
   //
-  // Given the D/V sweep above (Re, Rd and tax held at their current slider
-  // values), find the point with the lowest WACC. Note that with Re and Rd
-  // both held constant, WACC = (1 - d)*Re + d*Rd*(1-t) is a straight line
-  // in d = D/V - its slope, Rd*(1-t) - Re, never changes sign over the
-  // sweep. A linear function's minimum over a closed interval always sits
-  // at one of the two endpoints, so the "optimal" D/V this returns is
-  // generally 0% or 100% (a corner solution) rather than an interior
-  // point - see the explanatory note built in renderAll.
+  // Given the D/V sweep above (all other inputs held at their current
+  // slider values), find the point with the lowest WACC. Because Re and
+  // Rd are now both functions of leverage (see calcWACC), this sweep is a
+  // genuine curve with an interior minimum, not a straight line stuck at
+  // a 0%/100% corner: the tax shield of cheap debt dominates at low
+  // leverage, and the rising credit spread dominates at high leverage.
   function findOptimalDV(dvPoints) {
     return dvPoints.reduce((best, p) => (p.y < best.y ? p : best), dvPoints[0]);
   }
 
   // ---- Tornado (±25% flex) ---------------------------------------------
   // Flex each input +/-25% relative to its own current (base) value, one
-  // input at a time, holding the other three at base. The resulting WACC
-  // at each flexed point is recorded; low/high are taken as the min/max
-  // of the two so the bar always spans the correct direction regardless
-  // of whether the input is positively or negatively correlated with WACC.
+  // input at a time, holding the others at base. The resulting WACC at
+  // each flexed point is recorded; low/high are taken as the min/max of
+  // the two so the bar always spans the correct direction regardless of
+  // whether the input is positively or negatively correlated with WACC.
   function buildTornadoData(base) {
-    const baseWacc = calcWACC(base.re, base.rd, base.tax, base.dv).wacc * 100;
+    const baseWacc = calcWACC(base).wacc * 100;
 
     const rows = FIELD_ORDER.map((key) => {
       const range = RANGES[key];
@@ -471,8 +566,8 @@
       const trialLow = Object.assign({}, base); trialLow[key] = flexLow;
       const trialHigh = Object.assign({}, base); trialHigh[key] = flexHigh;
 
-      const waccAtLow = calcWACC(trialLow.re, trialLow.rd, trialLow.tax, trialLow.dv).wacc * 100;
-      const waccAtHigh = calcWACC(trialHigh.re, trialHigh.rd, trialHigh.tax, trialHigh.dv).wacc * 100;
+      const waccAtLow = calcWACC(trialLow).wacc * 100;
+      const waccAtHigh = calcWACC(trialHigh).wacc * 100;
 
       const low = Math.min(waccAtLow, waccAtHigh);
       const high = Math.max(waccAtLow, waccAtHigh);
@@ -533,7 +628,10 @@
     tornadoNote: document.getElementById("tornado-note"),
     optimalDv: document.getElementById("optimal-dv"),
     optimalWacc: document.getElementById("optimal-wacc"),
-    optimalNote: document.getElementById("optimal-note")
+    optimalNote: document.getElementById("optimal-note"),
+    leveredBeta: document.getElementById("out-leveredBeta"),
+    re: document.getElementById("out-re"),
+    rdEffective: document.getElementById("out-rdEffective")
   };
 
   // ---- Charts -------------------------------------------------------------
@@ -564,9 +662,9 @@
     const surfaceColor = getComputedStyle(document.documentElement).getPropertyValue("--surface-1").trim();
 
     // Single chart: WACC against Debt / Total Capital (D/V) alone. A line
-    // dataset carries the sweep (Re, Rd, tax held at their slider values);
-    // one dot marks the current D/V, a second (diamond) marks the D/V that
-    // minimizes WACC - see findOptimalDV above.
+    // dataset carries the sweep (Rf, beta, ERP, Rd0 and tax held at their
+    // slider values); one dot marks the current D/V, a second (diamond)
+    // marks the D/V that minimizes WACC - see findOptimalDV above.
     const statusGoodColor = getComputedStyle(document.documentElement).getPropertyValue("--status-good").trim();
     const dvRange = RANGES.dv;
     const dvCtx = document.getElementById("chart-dv").getContext("2d");
@@ -747,7 +845,7 @@
 
   // ---- Render -------------------------------------------------------------
   function renderAll() {
-    const result = calcWACC(state.re, state.rd, state.tax, state.dv);
+    const result = calcWACC(state);
 
     outEls.rdAfterTax.textContent = (result.rdAfterTax * 100).toFixed(2) + "%";
     outEls.equityContribution.textContent = (result.equityContribution * 100).toFixed(2) + "%";
@@ -757,6 +855,17 @@
     outEls.evNumber.value = (result.ev * 100).toFixed(2);
     outEls.splitDebt.style.width = (result.dv * 100) + "%";
     outEls.splitEquity.style.width = (result.ev * 100) + "%";
+
+    // CAPM / relevering readouts, guarded for the E/V -> 0% edge (D/V near
+    // 100%), where D/E diverges and Re is no longer a meaningful number.
+    if (result.ev < 0.005) {
+      outEls.leveredBeta.textContent = "n/a (E/V ≈ 0)";
+      outEls.re.textContent = "n/a (E/V ≈ 0)";
+    } else {
+      outEls.leveredBeta.textContent = result.betaLevered.toFixed(2);
+      outEls.re.textContent = (result.re * 100).toFixed(2) + "%";
+    }
+    outEls.rdEffective.textContent = (result.rdEffective * 100).toFixed(2) + "%";
 
     if (chartsReady) {
       // D/V sweep chart, plus the optimal-D/V readout derived from it.
@@ -771,19 +880,10 @@
       outEls.optimalDv.textContent = optimal.x.toFixed(2) + "%";
       outEls.optimalWacc.textContent = optimal.y.toFixed(2) + "%";
 
-      // Slope of WACC w.r.t. D/V: Rd*(1-t) - Re. Its sign alone determines
-      // which corner (0% or 100%) minimizes WACC.
-      const slope = (state.rd / 100) * (1 - state.tax / 100) - state.re / 100;
-      const atOptimalAlready = Math.abs(state.dv - optimal.x) < 0.01;
-      let reasonNote;
-      if (Math.abs(slope) < 1e-9) {
-        reasonNote = `Right now the after-tax cost of debt equals the cost of equity, so WACC is the same (${optimal.y.toFixed(2)}%) at every D/V - there's no single optimum.`;
-      } else {
-        const cheaperSide = slope < 0 ? "debt" : "equity";
-        reasonNote = `Because Re and Rd are held fixed regardless of leverage in this model, WACC moves in a straight line as D/V changes - here, after-tax ${cheaperSide} is cheaper, so WACC keeps improving toward the ${optimal.x === 100 ? "100%" : "0%"} edge rather than turning around at an interior point. A real optimum requires Re and Rd to rise with leverage (financial risk), which isn't modeled here.`;
-      }
+      const atOptimalAlready = Math.abs(state.dv - optimal.x) < 0.5;
+      const reasonNote = "This reflects the trade-off built into the model: cheap, tax-deductible debt pulls WACC down at low leverage, while the widening credit spread on Rd and the rising (Hamada-relevered) cost of equity pull it back up at high leverage.";
       outEls.optimalNote.innerHTML = (atOptimalAlready
-        ? `Your current D/V (${state.dv.toFixed(2)}%) is already the WACC-minimizing point. `
+        ? `Your current D/V (${state.dv.toFixed(2)}%) is already at, or very near, the WACC-minimizing point. `
         : `Moving D/V to <strong>${optimal.x.toFixed(2)}%</strong> would lower WACC from ${(result.wacc * 100).toFixed(2)}% to <strong>${optimal.y.toFixed(2)}%</strong>. `
       ) + reasonNote;
 
