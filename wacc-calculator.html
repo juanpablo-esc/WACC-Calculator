@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WACC Calculator</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" onerror="window.__CHART_LOAD_FAILED__ = true"></script>
 <style>
   :root {
     color-scheme: light;
@@ -125,15 +125,18 @@
     color: var(--text-muted);
     background: transparent;
   }
+  input[type="range"]:disabled {
+    accent-color: var(--text-muted);
+    opacity: 0.7;
+  }
 
   .ev-field { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gridline); }
-  .ev-value { font-size: 0.85rem; color: var(--text-primary); font-weight: 600; }
   .split-bar {
     display: flex;
     height: 10px;
     border-radius: 5px;
     overflow: hidden;
-    margin-top: 8px;
+    margin-top: 10px;
     background: var(--gridline);
   }
   .split-bar .debt { background: var(--series-2); }
@@ -176,8 +179,33 @@
 
   .chart-card { height: auto; }
   .chart-card canvas { max-width: 100%; }
-  #sensitivityChart { height: 320px !important; }
   #tornadoChart { height: 260px !important; }
+
+  .sensitivity-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px 20px;
+  }
+  @media (max-width: 640px) {
+    .sensitivity-grid { grid-template-columns: 1fr; }
+  }
+  .sensitivity-cell h3 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+  }
+  .sensitivity-cell canvas { height: 190px !important; }
+
+  .chart-fallback {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+  }
 
   .note {
     margin: 12px 0 0;
@@ -236,10 +264,14 @@
         </div>
       </div>
 
-      <div class="ev-field">
+      <div class="field ev-field" data-field="ev">
         <div class="field-row">
-          <label>Equity Weight (E/V) — derived</label>
-          <span class="ev-value" id="ev-value">70.00%</span>
+          <label for="ev-range">Equity Weight (E/V) — derived</label>
+        </div>
+        <div class="field-controls">
+          <input type="range" id="ev-range" min="0" max="100" step="0.5" value="70" disabled>
+          <input type="number" id="ev-number" min="0" max="100" step="0.5" value="70" disabled>
+          <span>%</span>
         </div>
         <div class="split-bar">
           <div class="debt" id="split-debt" style="width:30%"></div>
@@ -274,7 +306,24 @@
 
       <section class="card chart-card">
         <h2>Sensitivity of WACC to Each Input</h2>
-        <canvas id="sensitivityChart"></canvas>
+        <div class="sensitivity-grid">
+          <div class="sensitivity-cell">
+            <h3>WACC vs. Cost of Equity (Re)</h3>
+            <canvas id="chart-re"></canvas>
+          </div>
+          <div class="sensitivity-cell">
+            <h3>WACC vs. Cost of Debt (Rd)</h3>
+            <canvas id="chart-rd"></canvas>
+          </div>
+          <div class="sensitivity-cell">
+            <h3>WACC vs. Tax Rate (t)</h3>
+            <canvas id="chart-tax"></canvas>
+          </div>
+          <div class="sensitivity-cell">
+            <h3>WACC vs. Debt Weight (D/V)</h3>
+            <canvas id="chart-dv"></canvas>
+          </div>
+        </div>
       </section>
 
       <section class="card chart-card">
@@ -366,15 +415,6 @@
     return points;
   }
 
-  function buildSensitivityData(base, steps) {
-    steps = steps || 50;
-    const out = {};
-    FIELD_ORDER.forEach((key) => {
-      out[key] = sweepInput(key, base, steps);
-    });
-    return out;
-  }
-
   // ---- Tornado (±25% flex) ---------------------------------------------
   // Flex each input +/-25% relative to its own current (base) value, one
   // input at a time, holding the other three at base. The resulting WACC
@@ -448,92 +488,104 @@
     equityContribution: document.getElementById("out-equityContribution"),
     debtContribution: document.getElementById("out-debtContribution"),
     wacc: document.getElementById("out-wacc"),
-    evValue: document.getElementById("ev-value"),
+    evRange: document.getElementById("ev-range"),
+    evNumber: document.getElementById("ev-number"),
     splitDebt: document.getElementById("split-debt"),
     splitEquity: document.getElementById("split-equity"),
     tornadoNote: document.getElementById("tornado-note")
   };
 
   // ---- Charts -------------------------------------------------------------
-  let sensitivityChart, tornadoChart;
+  let sensitivityCharts = {};
+  let tornadoChart;
+  let chartsReady = false;
+
+  // If the Chart.js CDN script failed to load (network block, ad-blocker,
+  // offline), swap every chart canvas for a visible explanation instead of
+  // silently showing nothing.
+  function showChartLoadError() {
+    document.querySelectorAll(".sensitivity-cell canvas, #tornadoChart").forEach((canvas) => {
+      const msg = document.createElement("div");
+      msg.className = "chart-fallback";
+      msg.textContent = "Charts failed to load: this page loads Chart.js from cdnjs.cloudflare.com and couldn't reach it. Check your network connection or ad-blocker, then reload the page.";
+      canvas.replaceWith(msg);
+    });
+  }
 
   function initCharts() {
-    const sensCtx = document.getElementById("sensitivityChart").getContext("2d");
+    if (typeof Chart === "undefined") {
+      showChartLoadError();
+      return;
+    }
+
     const gridColor = getComputedStyle(document.documentElement).getPropertyValue("--gridline").trim();
     const mutedColor = getComputedStyle(document.documentElement).getPropertyValue("--text-muted").trim();
     const secondaryColor = getComputedStyle(document.documentElement).getPropertyValue("--text-secondary").trim();
     const surfaceColor = getComputedStyle(document.documentElement).getPropertyValue("--surface-1").trim();
 
-    const lineDatasets = FIELD_ORDER.map((key) => ({
-      label: RANGES[key].label,
-      data: [],
-      borderColor: seriesColor(key),
-      backgroundColor: seriesColor(key),
-      borderWidth: 2,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      tension: 0.15,
-      key
-    }));
-
-    const baseMarkerDataset = {
-      type: "scatter",
-      label: "Base case",
-      data: [],
-      backgroundColor: FIELD_ORDER.map(seriesColor),
-      pointBackgroundColor: [],
-      pointBorderColor: surfaceColor,
-      pointBorderWidth: 2,
-      pointRadius: 6,
-      pointHoverRadius: 7,
-      showLine: false,
-      order: -1
-    };
-
-    sensitivityChart = new Chart(sensCtx, {
-      type: "line",
-      data: { datasets: lineDatasets.concat([baseMarkerDataset]) },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 150 },
-        interaction: { mode: "nearest", intersect: false },
-        scales: {
-          x: {
-            type: "linear",
-            min: 0,
-            max: 100,
-            title: { display: true, text: "% of input's own range", color: mutedColor },
-            grid: { color: gridColor, drawTicks: false },
-            ticks: { color: mutedColor, callback: (v) => v + "%" }
-          },
-          y: {
-            title: { display: true, text: "WACC (%)", color: mutedColor },
-            grid: { color: gridColor, drawTicks: false },
-            ticks: { color: mutedColor, callback: (v) => v.toFixed(1) + "%" }
-          }
+    // One small chart per input: its own value (raw units) on the x-axis,
+    // WACC on the y-axis. A single line dataset carries the sweep; a small
+    // second dataset overlays one dot marking the current (base-case) value.
+    FIELD_ORDER.forEach((key) => {
+      const range = RANGES[key];
+      const ctx = document.getElementById(`chart-${key}`).getContext("2d");
+      sensitivityCharts[key] = new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              label: range.label,
+              data: [],
+              borderColor: seriesColor(key),
+              backgroundColor: seriesColor(key),
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              tension: 0.15
+            },
+            {
+              type: "scatter",
+              label: "Base case",
+              data: [],
+              backgroundColor: seriesColor(key),
+              pointBorderColor: surfaceColor,
+              pointBorderWidth: 2,
+              pointRadius: 6,
+              pointHoverRadius: 7,
+              showLine: false
+            }
+          ]
         },
-        plugins: {
-          legend: {
-            display: true,
-            labels: {
-              color: secondaryColor,
-              filter: (item) => item.text !== "Base case"
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 150 },
+          interaction: { mode: "nearest", intersect: false },
+          scales: {
+            x: {
+              type: "linear",
+              min: range.min,
+              max: range.max,
+              title: { display: true, text: `${range.label} (%)`, color: mutedColor },
+              grid: { color: gridColor, drawTicks: false },
+              ticks: { color: mutedColor, callback: (v) => v + "%" }
+            },
+            y: {
+              title: { display: true, text: "WACC (%)", color: mutedColor },
+              grid: { color: gridColor, drawTicks: false },
+              ticks: { color: mutedColor, callback: (v) => v.toFixed(1) + "%" }
             }
           },
-          tooltip: {
-            callbacks: {
-              title: (items) => items[0].dataset.label || "",
-              label: (item) => {
-                const raw = item.raw;
-                const key = item.dataset.key;
-                const valueLabel = key ? `${RANGES[key].label.match(/\(([^)]+)\)/)[1]}: ${raw.rawValue.toFixed(2)}%` : "";
-                return `${valueLabel}  →  WACC ${raw.y.toFixed(2)}%`;
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (item) => `${range.label}: ${item.raw.x.toFixed(2)}%  →  WACC ${item.raw.y.toFixed(2)}%`
               }
             }
           }
         }
-      }
+      });
     });
 
     const tornadoCtx = document.getElementById("tornadoChart").getContext("2d");
@@ -581,6 +633,8 @@
       },
       plugins: [baseLinePlugin, swingLabelPlugin]
     });
+
+    chartsReady = true;
   }
 
   // Custom plugin: draws a dashed vertical reference line at the base-case
@@ -645,41 +699,38 @@
     outEls.equityContribution.textContent = (result.equityContribution * 100).toFixed(2) + "%";
     outEls.debtContribution.textContent = (result.debtContribution * 100).toFixed(2) + "%";
     outEls.wacc.textContent = (result.wacc * 100).toFixed(2) + "%";
-    outEls.evValue.textContent = (result.ev * 100).toFixed(2) + "%";
+    outEls.evRange.value = result.ev * 100;
+    outEls.evNumber.value = (result.ev * 100).toFixed(2);
     outEls.splitDebt.style.width = (result.dv * 100) + "%";
     outEls.splitEquity.style.width = (result.ev * 100) + "%";
 
-    // Sensitivity chart
-    const sweepData = buildSensitivityData(state, 50);
-    sensitivityChart.data.datasets.forEach((ds) => {
-      if (!ds.key) return;
-      ds.data = sweepData[ds.key];
-    });
-    const baseMarkerDs = sensitivityChart.data.datasets.find((d) => !d.key);
-    baseMarkerDs.data = FIELD_ORDER.map((key) => {
-      const range = RANGES[key];
-      const xPct = ((state[key] - range.min) / (range.max - range.min)) * 100;
-      return { x: xPct, y: result.wacc * 100 };
-    });
-    baseMarkerDs.pointBackgroundColor = FIELD_ORDER.map(seriesColor);
-    sensitivityChart.update("none");
+    if (chartsReady) {
+      // One chart per input: sweep that input alone across its own range
+      // (see sweepInput above) and drop the current value in as the base dot.
+      FIELD_ORDER.forEach((key) => {
+        const chart = sensitivityCharts[key];
+        chart.data.datasets[0].data = sweepInput(key, state, 50);
+        chart.data.datasets[1].data = [{ x: state[key], y: result.wacc * 100 }];
+        chart.update("none");
+      });
 
-    // Tornado chart
-    const tornado = buildTornadoData(state);
-    tornadoRowsCache = tornado.rows;
-    tornadoBaseWaccCache = tornado.baseWacc;
+      // Tornado chart
+      const tornado = buildTornadoData(state);
+      tornadoRowsCache = tornado.rows;
+      tornadoBaseWaccCache = tornado.baseWacc;
 
-    tornadoChart.data.labels = tornado.rows.map((r) => r.label);
-    tornadoChart.data.datasets[0].data = tornado.rows.map((r) => [r.low, r.high]);
-    tornadoChart.data.datasets[0].backgroundColor = tornado.rows.map((r) => seriesColor(r.key));
-    // Leave headroom for the swing-in-bps labels drawn past each bar's end.
-    const maxAbs = Math.max(...tornado.rows.map((r) => Math.max(Math.abs(r.high - tornado.baseWacc), Math.abs(r.low - tornado.baseWacc))));
-    tornadoChart.options.scales.x.min = tornado.baseWacc - maxAbs * 1.5 - 0.5;
-    tornadoChart.options.scales.x.max = tornado.baseWacc + maxAbs * 1.5 + 0.5;
-    tornadoChart.update("none");
+      tornadoChart.data.labels = tornado.rows.map((r) => r.label);
+      tornadoChart.data.datasets[0].data = tornado.rows.map((r) => [r.low, r.high]);
+      tornadoChart.data.datasets[0].backgroundColor = tornado.rows.map((r) => seriesColor(r.key));
+      // Leave headroom for the swing-in-bps labels drawn past each bar's end.
+      const maxAbs = Math.max(...tornado.rows.map((r) => Math.max(Math.abs(r.high - tornado.baseWacc), Math.abs(r.low - tornado.baseWacc))));
+      tornadoChart.options.scales.x.min = tornado.baseWacc - maxAbs * 1.5 - 0.5;
+      tornadoChart.options.scales.x.max = tornado.baseWacc + maxAbs * 1.5 + 0.5;
+      tornadoChart.update("none");
 
-    const top = tornado.rows[0];
-    outEls.tornadoNote.innerHTML = `WACC is most sensitive to <strong>${top.label}</strong> at the current base case: flexing it ±25% swings WACC by <strong>${Math.round(top.swingBps)} bps</strong> (from ${top.low.toFixed(2)}% to ${top.high.toFixed(2)}%), more than any other input.`;
+      const top = tornado.rows[0];
+      outEls.tornadoNote.innerHTML = `WACC is most sensitive to <strong>${top.label}</strong> at the current base case: flexing it ±25% swings WACC by <strong>${Math.round(top.swingBps)} bps</strong> (from ${top.low.toFixed(2)}% to ${top.high.toFixed(2)}%), more than any other input.`;
+    }
   }
 
   // ---- Init ----------------------------------------------------------------
@@ -688,7 +739,8 @@
   renderAll();
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    sensitivityChart.destroy();
+    if (!chartsReady) return;
+    FIELD_ORDER.forEach((key) => sensitivityCharts[key].destroy());
     tornadoChart.destroy();
     initCharts();
     renderAll();
